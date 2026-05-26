@@ -44,17 +44,24 @@ func New() *Client {
 	}
 }
 
+// throttle blocks until at least minInterval has elapsed since the last
+// recorded request to host h, then records the new call timestamp before
+// returning. Multiple goroutines racing on the same host see each other's
+// recorded timestamps and queue up serially instead of all sleeping in
+// parallel and firing at once.
 func (c *Client) throttle(h Host) {
-	c.mu.Lock()
-	last := c.lastCall[h]
-	wait := c.minInterval - time.Since(last)
-	if wait > 0 {
+	for {
+		c.mu.Lock()
+		last := c.lastCall[h]
+		wait := c.minInterval - time.Since(last)
+		if wait <= 0 {
+			c.lastCall[h] = time.Now()
+			c.mu.Unlock()
+			return
+		}
 		c.mu.Unlock()
 		time.Sleep(wait)
-		c.mu.Lock()
 	}
-	c.lastCall[h] = time.Now()
-	c.mu.Unlock()
 }
 
 // Get performs a GET request with retry/backoff and returns the response body.

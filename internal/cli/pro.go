@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -24,9 +25,10 @@ func requirePro(cx *Ctx) error {
 	return nil
 }
 
-// proGet hits the pro-api host. Pro base URL has the key embedded: pro-api.llama.fi/{KEY}.
-// Free endpoints are prepended with /api/ when hitting pro; pro-only endpoints use
-// their documented paths as-is.
+// proGet hits the pro-api host. Pro base URL has the key embedded:
+// pro-api.llama.fi/{KEY}. Errors returned by the underlying client wrap the
+// full URL, which would leak the pro key into stderr; redactKey scrubs it
+// before propagation.
 func proGet(ctx context.Context, cx *Ctx, path string, q url.Values) ([]byte, error) {
 	key := cx.Cfg.ResolvedProKey()
 	if key == "" {
@@ -35,21 +37,24 @@ func proGet(ctx context.Context, cx *Ctx, path string, q url.Values) ([]byte, er
 	host := client.Host("https://pro-api.llama.fi/" + key)
 	body, err := cx.C.Get(ctx, host, path, q)
 	if err != nil {
-		return nil, err
+		return nil, redactKey(err, key)
 	}
 	defer body.Close()
-	buf := make([]byte, 0, 1024)
-	tmp := make([]byte, 4096)
-	for {
-		n, err := body.Read(tmp)
-		if n > 0 {
-			buf = append(buf, tmp[:n]...)
-		}
-		if err != nil {
-			break
-		}
+	buf, err := io.ReadAll(body)
+	if err != nil {
+		return nil, redactKey(fmt.Errorf("reading response body: %w", err), key)
 	}
 	return buf, nil
+}
+
+// redactKey replaces the pro key inside an error message with "***" so it
+// can be surfaced to the user without exposing the secret.
+func redactKey(err error, key string) error {
+	if err == nil || key == "" {
+		return err
+	}
+	msg := strings.ReplaceAll(err.Error(), key, "***")
+	return fmt.Errorf("%s", msg)
 }
 
 // Ensure pro tables exist; called lazily on first pro command that needs them.

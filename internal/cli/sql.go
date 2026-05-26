@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,12 +27,17 @@ func newSQLCmd() *cobra.Command {
 	return cmd
 }
 
+// bannedSQLKeyword matches any write-side SQL keyword as a standalone token.
+// Word boundaries prevent false positives on column or alias names that
+// contain these substrings (e.g. "created_at"). The regex catches keywords
+// anywhere in the statement -- including buried inside a CTE such as
+// `WITH x AS (SELECT 1) DELETE FROM protocols`, which a prefix/semicolon
+// check would let through.
+var bannedSQLKeyword = regexp.MustCompile(`(?i)\b(insert|update|delete|drop|alter|create|attach|detach|pragma|replace|truncate|vacuum|reindex)\b`)
+
 func guardReadOnlySQL(q string) error {
-	lower := strings.ToLower(strings.TrimSpace(q))
-	for _, banned := range []string{"insert ", "update ", "delete ", "drop ", "alter ", "create ", "attach ", "detach ", "pragma "} {
-		if strings.HasPrefix(lower, banned) || strings.Contains(lower, "; "+banned) || strings.Contains(lower, ";"+banned) {
-			return fmt.Errorf("only SELECT statements are allowed (use writer commands for syncing)")
-		}
+	if bannedSQLKeyword.MatchString(q) {
+		return fmt.Errorf("only SELECT statements are allowed (use writer commands for syncing)")
 	}
 	return nil
 }
@@ -197,22 +203,26 @@ func numericAsFloat(v any) (float64, bool) {
 	return 0, false
 }
 
+// parseFloatLoose accepts the same shape as strconv.ParseFloat but rejects
+// strings that obviously aren't numeric so the type-inference pass in `sql`
+// can decide whether to right-align a column. Signs are allowed at position 0
+// or immediately after an `e`/`E` (so "-1.5e-9" parses correctly).
 func parseFloatLoose(s string) (float64, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("empty")
 	}
-	// only digits / . / sign / e (case-insensitive)
+	prevIsExp := false
 	for i, c := range s {
 		switch {
 		case c >= '0' && c <= '9':
 		case c == '.':
-		case c == '-' && i == 0:
-		case c == '+' && i == 0:
+		case (c == '-' || c == '+') && (i == 0 || prevIsExp):
 		case c == 'e' || c == 'E':
 		default:
 			return 0, fmt.Errorf("not numeric")
 		}
+		prevIsExp = c == 'e' || c == 'E'
 	}
 	var f float64
 	_, err := fmt.Sscanf(s, "%g", &f)

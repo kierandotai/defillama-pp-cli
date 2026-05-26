@@ -547,13 +547,18 @@ func (e *Engine) syncDexChainVolume(ctx context.Context, chains []string) error 
 			resCh <- result{chain: c, rows: resp.Protocols}
 		}(c)
 	}
-	// drain
+	// Drain results. Surface per-chain fetch errors as reports (best-effort,
+	// many chains have no DEXs) but bubble transaction errors -- a SQLite
+	// failure during write would otherwise leave the table empty with no
+	// signal to the caller.
+	var firstWriteErr error
 	for i := 0; i < len(chains); i++ {
 		r := <-resCh
 		if r.err != nil {
+			e.Report("dexs", fmt.Sprintf("chain %s: %v", r.chain, r.err))
 			continue
 		}
-		_ = e.S.Tx(func(tx *sql.Tx) error {
+		err := e.S.Tx(func(tx *sql.Tx) error {
 			stmt, err := tx.Prepare(`INSERT OR REPLACE INTO dex_chain_volume
 				(protocol, chain, total_24h, total_7d, total_30d) VALUES (?,?,?,?,?)`)
 			if err != nil {
@@ -576,8 +581,11 @@ func (e *Engine) syncDexChainVolume(ctx context.Context, chains []string) error 
 			}
 			return nil
 		})
+		if err != nil && firstWriteErr == nil {
+			firstWriteErr = fmt.Errorf("chain %s: %w", r.chain, err)
+		}
 	}
-	return nil
+	return firstWriteErr
 }
 
 // ---------- Fees & Revenue ----------
