@@ -1,5 +1,5 @@
-# compiled binary
-defillama-pp-cli
+# compiled binary at repo root (don't match cmd/defillama-pp-cli/)
+/defillama-pp-cli
 
 # local data
 *.db
