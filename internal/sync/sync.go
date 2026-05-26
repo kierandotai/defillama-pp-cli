@@ -503,10 +503,13 @@ func (e *Engine) syncDexs(ctx context.Context) (int, error) {
 		return n, err
 	}
 	// Per-chain DEX volume: hit /overview/dexs/{chain} for each chain reported.
+	// Bubble the error so SyncDomains skips SetSyncMeta and the next staleness
+	// check retries — otherwise a write failure leaves dex_chain_volume empty
+	// while sync_meta records the domain as freshly synced.
 	chains := resp.AllChains
 	if len(chains) > 0 {
 		if err := e.syncDexChainVolume(ctx, chains); err != nil {
-			e.Report("dexs", "per-chain volume partial: "+err.Error())
+			return n, fmt.Errorf("per-chain volume: %w", err)
 		}
 	}
 	return n, nil
