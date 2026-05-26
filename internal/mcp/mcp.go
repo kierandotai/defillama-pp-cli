@@ -19,10 +19,21 @@ import (
 
 // Run reads JSON-RPC requests from in (newline-delimited), writes responses to
 // out, and logs to errOut. It blocks until in is closed.
-func Run(in io.Reader, out io.Writer, errOut io.Writer) error {
-	bin, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("locate binary: %w", err)
+//
+// cliBin is the path to the defillama-pp-cli binary used to execute each tool
+// call. If empty, the running executable is used (the in-process `mcp`
+// subcommand path). The separate defillama-pp-mcp binary passes its sibling
+// CLI path here.
+func Run(in io.Reader, out io.Writer, errOut io.Writer, cliBin ...string) error {
+	bin := ""
+	if len(cliBin) > 0 && cliBin[0] != "" {
+		bin = cliBin[0]
+	} else {
+		b, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("locate binary: %w", err)
+		}
+		bin = b
 	}
 	s := &server{bin: bin, out: out, err: errOut}
 	scanner := bufio.NewScanner(in)
