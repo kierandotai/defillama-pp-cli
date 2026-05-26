@@ -1,5 +1,5 @@
 // Package commands wires the CLI surface using cobra.
-package commands
+package cli
 
 import (
 	"context"

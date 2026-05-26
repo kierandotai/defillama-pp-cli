@@ -51,11 +51,11 @@ defillama-pp-cli stables flow --period 30d --sort change
 # Live token price (pass-through, no mirror)
 defillama-pp-cli price ethereum:0xdac17f958d2ee523a2206206994597c13d831ec7
 
-# Raw SQL when no named command fits
-defillama-pp-cli sql "SELECT p.name, p.tvl, f.total_24h_rev, p.change_7d
-  FROM protocols p JOIN fees_overview f ON p.slug = f.protocol
-  WHERE f.total_24h_rev > 50000 AND p.change_7d < -5
-  ORDER BY f.total_24h_rev DESC LIMIT 15"
+# Raw SQL when no named command fits. The escape hatch is read-only (only
+# SELECT). Spaces around `<` / `>` are interpreted by the shell as redirects
+# in scripts -- pipe the query in from a file or quote tightly (e.g.
+# `WHERE x>0` without spaces) when comparisons are needed.
+defillama-pp-cli sql "SELECT p.name, p.tvl, p.category FROM protocols p ORDER BY p.tvl DESC LIMIT 15"
 
 # Export to file
 defillama-pp-cli export --format csv --query "SELECT ..." --output data.csv

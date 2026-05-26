@@ -1,4 +1,4 @@
-package commands
+package cli
 
 import (
 	"context"
@@ -21,28 +21,32 @@ func newYieldsCmd() *cobra.Command {
 		Short: "Search yield pools across chains and projects",
 		RunE:  yieldsRun(&chain, &project, &sortBy, &minTVL, &stableOnly, &singleOnly, &poolID, &history, &period),
 	}
-	addYieldsFlags(cmd, &chain, &project, &sortBy, &minTVL, &stableOnly, &singleOnly, &poolID, &history, &period)
+	cmd.Flags().StringVar(&chain, "chain", "", "filter by chain")
+	cmd.Flags().StringVar(&project, "project", "", "filter by project (e.g. aave, curve-dex)")
+	cmd.Flags().StringVar(&sortBy, "sort", "tvl", "sort key: tvl|apy|apy_base")
+	cmd.Flags().Float64Var(&minTVL, "min-tvl", 0, "minimum TVL in USD")
+	cmd.Flags().BoolVar(&stableOnly, "stablecoin-only", false, "only stablecoin pools")
+	cmd.Flags().BoolVar(&singleOnly, "single-only", false, "only single-asset exposure pools")
+	cmd.Flags().StringVar(&poolID, "pool", "", "show history for a specific pool id (requires --history)")
+	cmd.Flags().BoolVar(&history, "history", false, "show historical chart for the --pool")
+	cmd.Flags().StringVar(&period, "period", "30d", "period: 7d|30d|90d|180d|1y|all")
 
 	top := &cobra.Command{
 		Use:   "top",
 		Short: "Top yield pools matching criteria",
 		RunE:  yieldsRun(&chain, &project, &sortBy, &minTVL, &stableOnly, &singleOnly, &poolID, &history, &period),
 	}
-	addYieldsFlags(top, &chain, &project, &sortBy, &minTVL, &stableOnly, &singleOnly, &poolID, &history, &period)
+	top.Flags().StringVar(&chain, "chain", "", "filter by chain")
+	top.Flags().StringVar(&project, "project", "", "filter by project (e.g. aave, curve-dex)")
+	top.Flags().StringVar(&sortBy, "sort", "tvl", "sort key: tvl|apy|apy_base")
+	top.Flags().Float64Var(&minTVL, "min-tvl", 0, "minimum TVL in USD")
+	top.Flags().BoolVar(&stableOnly, "stablecoin-only", false, "only stablecoin pools")
+	top.Flags().BoolVar(&singleOnly, "single-only", false, "only single-asset exposure pools")
+	top.Flags().StringVar(&poolID, "pool", "", "show history for a specific pool id (requires --history)")
+	top.Flags().BoolVar(&history, "history", false, "show historical chart for the --pool")
+	top.Flags().StringVar(&period, "period", "30d", "period: 7d|30d|90d|180d|1y|all")
 	cmd.AddCommand(top)
 	return cmd
-}
-
-func addYieldsFlags(cmd *cobra.Command, chain, project, sortBy *string, minTVL *float64, stableOnly, singleOnly *bool, poolID *string, history *bool, period *string) {
-	cmd.Flags().StringVar(chain, "chain", "", "filter by chain")
-	cmd.Flags().StringVar(project, "project", "", "filter by project (e.g. aave, curve-dex)")
-	cmd.Flags().StringVar(sortBy, "sort", "tvl", "sort key: tvl|apy|apy_base")
-	cmd.Flags().Float64Var(minTVL, "min-tvl", 0, "minimum TVL in USD")
-	cmd.Flags().BoolVar(stableOnly, "stablecoin-only", false, "only stablecoin pools")
-	cmd.Flags().BoolVar(singleOnly, "single-only", false, "only single-asset exposure pools")
-	cmd.Flags().StringVar(poolID, "pool", "", "show history for a specific pool id (requires --history)")
-	cmd.Flags().BoolVar(history, "history", false, "show historical chart for the --pool")
-	cmd.Flags().StringVar(period, "period", "30d", "period: 7d|30d|90d|180d|1y|all")
 }
 
 func yieldsRun(chain, project, sortBy *string, minTVL *float64, stableOnly, singleOnly *bool, poolID *string, history *bool, period *string) func(*cobra.Command, []string) error {
