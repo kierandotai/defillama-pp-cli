@@ -30,7 +30,7 @@ type Client struct {
 	UserAgent string
 
 	mu       sync.Mutex
-	lastCall map[Host]time.Time
+	nextSlot map[Host]time.Time
 	// minimum spacing between requests to the same host
 	minInterval time.Duration
 }
@@ -39,28 +39,27 @@ func New() *Client {
 	return &Client{
 		HTTP:        &http.Client{Timeout: 60 * time.Second},
 		UserAgent:   "github.com/kierandotai/defillama-pp-cli/0.1 (+https://defillama.com)",
-		lastCall:    map[Host]time.Time{},
+		nextSlot:    map[Host]time.Time{},
 		minInterval: 150 * time.Millisecond,
 	}
 }
 
-// throttle blocks until at least minInterval has elapsed since the last
-// recorded request to host h, then records the new call timestamp before
-// returning. Multiple goroutines racing on the same host see each other's
-// recorded timestamps and queue up serially instead of all sleeping in
-// parallel and firing at once.
+// throttle reserves the next available send-slot for host h under the
+// mutex, then sleeps until that slot arrives. Each caller reserves a
+// *distinct* slot before releasing the lock, so N concurrent goroutines
+// get N slots spaced minInterval apart — there's no shared `wait` value
+// that could let several of them wake and fire together.
 func (c *Client) throttle(h Host) {
-	for {
-		c.mu.Lock()
-		last := c.lastCall[h]
-		wait := c.minInterval - time.Since(last)
-		if wait <= 0 {
-			c.lastCall[h] = time.Now()
-			c.mu.Unlock()
-			return
-		}
-		c.mu.Unlock()
-		time.Sleep(wait)
+	c.mu.Lock()
+	now := time.Now()
+	slot := c.nextSlot[h]
+	if slot.Before(now) {
+		slot = now
+	}
+	c.nextSlot[h] = slot.Add(c.minInterval)
+	c.mu.Unlock()
+	if d := time.Until(slot); d > 0 {
+		time.Sleep(d)
 	}
 }
 
